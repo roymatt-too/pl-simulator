@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>月次PLシミュレーター</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f6fa;
+  --card: #fff;
+  --border: #e0e3eb;
+  --text: #1a1a2e;
+  --text-sub: #6b7280;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --green: #059669;
+  --green-bg: #d1fae5;
+  --red: #dc2626;
+  --red-bg: #fee2e2;
+  --yellow: #d97706;
+  --yellow-bg: #fef3c7;
+  --radius: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.container { max-width: 1000px; margin: 0 auto; padding: 16px; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+  padding-bottom: 16px; border-bottom: 2px solid var(--border);
+}
+header h1 { font-size: 1.4rem; font-weight: 700; }
+
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+button {
+  font-family: inherit; font-size: 0.85rem; padding: 6px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); color: var(--text); cursor: pointer;
+  transition: background 0.15s; white-space: nowrap;
+}
+button:hover { background: var(--accent-light); border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.primary:hover { background: #1d4ed8; }
+button.danger { color: var(--red); border-color: var(--red); }
+button.danger:hover { background: var(--red-bg); }
+button.small { font-size: 0.75rem; padding: 3px 8px; }
+button.ghost { border: none; background: none; color: var(--accent); padding: 2px 6px; font-size: 0.75rem; }
+button.ghost:hover { background: var(--accent-light); }
+button.ghost-danger { border: none; background: none; color: var(--red); padding: 2px 6px; font-size: 0.75rem; }
+button.ghost-danger:hover { background: var(--red-bg); }
+
+.month-nav {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.month-nav select {
+  font-family: inherit; font-size: 1rem; padding: 6px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); min-width: 160px;
+}
+.month-nav input[type="month"] {
+  font-family: inherit; font-size: 0.9rem; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+
+/* Summary */
+.summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.summary-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px;
+}
+.summary-card .label { font-size: 0.75rem; color: var(--text-sub); margin-bottom: 4px; }
+.summary-card .value { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.summary-card .diff { font-size: 0.75rem; margin-top: 4px; }
+.positive { color: var(--green); }
+.negative { color: var(--red); }
+
+/* PL Section */
+.pl-section {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 16px; overflow: hidden;
+}
+.pl-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: var(--accent-light);
+  font-weight: 600; font-size: 0.9rem;
+}
+
+/* PL Row */
+.pl-row {
+  display: grid; grid-template-columns: 1fr 150px 100px 30px;
+  align-items: center; padding: 7px 16px;
+  border-top: 1px solid var(--border); gap: 6px;
+}
+.pl-row.computed { background: #f8fafc; font-weight: 600; }
+.pl-row.subtotal { background: var(--accent-light); font-weight: 700; }
+.pl-row.parent-row { background: #fafbff; }
+
+.pl-row .item-name {
+  font-size: 0.85rem; display: flex; align-items: center; gap: 6px;
+}
+.pl-row .item-name .badge {
+  font-size: 0.6rem; padding: 1px 5px; border-radius: 3px; font-weight: 500;
+}
+.badge.optional { background: var(--yellow-bg); color: var(--yellow); }
+.badge.confirm { background: var(--red-bg); color: var(--red); }
+.badge.auto { background: var(--green-bg); color: var(--green); }
+
+.pl-row input[type="number"], .pl-row input[type="text"] {
+  font-family: inherit; font-size: 0.9rem; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 4px;
+  width: 100%; font-variant-numeric: tabular-nums;
+}
+.pl-row input[type="number"] { text-align: right; }
+.pl-row input[type="number"]:focus, .pl-row input[type="text"]:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+.pl-row .computed-value {
+  text-align: right; font-size: 0.9rem; padding: 5px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.pl-row .prev-value {
+  font-size: 0.75rem; color: var(--text-sub); text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-row-header {
+  display: grid; grid-template-columns: 1fr 150px 100px 30px;
+  padding: 6px 16px; font-size: 0.7rem; color: var(--text-sub);
+  text-transform: uppercase; letter-spacing: 0.5px; gap: 6px;
+}
+.pl-row-header span:nth-child(2),
+.pl-row-header span:nth-child(3) { text-align: right; }
+
+/* Detail rows (sub-items) */
+.detail-row {
+  display: grid; grid-template-columns: 24px 1fr 130px 24px;
+  align-items: center; padding: 4px 16px 4px 32px;
+  border-top: 1px dashed #e8eaf0; gap: 6px;
+  background: #fcfcff;
+}
+.detail-row input[type="text"] {
+  font-family: inherit; font-size: 0.8rem; padding: 4px 6px;
+  border: 1px solid var(--border); border-radius: 4px; width: 100%;
+}
+.detail-row input[type="number"] {
+  font-family: inherit; font-size: 0.8rem; padding: 4px 6px;
+  border: 1px solid var(--border); border-radius: 4px; width: 100%;
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.detail-row input:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light);
+}
+.detail-row .detail-idx {
+  font-size: 0.7rem; color: var(--text-sub); text-align: center;
+}
+
+.add-detail-row {
+  padding: 4px 16px 6px 32px;
+  border-top: 1px dashed #e8eaf0; background: #fcfcff;
+}
+
+/* Toggle detail button */
+.toggle-detail {
+  font-size: 0.7rem; cursor: pointer; color: var(--accent);
+  background: none; border: none; padding: 2px 4px;
+  font-family: inherit;
+}
+.toggle-detail:hover { text-decoration: underline; }
+
+/* Parent total (auto-summed from details) */
+.parent-total {
+  text-align: right; font-size: 0.85rem; font-weight: 600;
+  padding: 5px 8px; color: var(--accent); font-variant-numeric: tabular-nums;
+}
+
+/* Memo */
+.memo-section {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+}
+.memo-section label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; }
+.memo-section textarea {
+  font-family: inherit; font-size: 0.85rem; width: 100%; min-height: 80px;
+  padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  resize: vertical; line-height: 1.5;
+}
+.memo-section textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+/* Category management */
+.category-mgmt {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+}
+.category-mgmt h3 { font-size: 0.95rem; margin-bottom: 12px; }
+.cat-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-bottom: 1px solid var(--border); font-size: 0.85rem;
+}
+.cat-item:last-child { border-bottom: none; }
+.cat-item input[type="checkbox"] { flex-shrink: 0; }
+.cat-item .cat-name { flex: 1; }
+
+/* Confirm box */
+.confirm-box {
+  background: var(--yellow-bg); border: 1px solid #fbbf24;
+  border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+}
+.confirm-box h3 { font-size: 0.9rem; margin-bottom: 8px; color: var(--yellow); }
+.confirm-box ul { padding-left: 20px; font-size: 0.85rem; }
+.confirm-box li { margin-bottom: 4px; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--text); color: #fff; padding: 10px 20px;
+  border-radius: var(--radius); font-size: 0.85rem;
+  opacity: 0; transform: translateY(10px); transition: all 0.3s; z-index: 200;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .pl-row { grid-template-columns: 1fr 120px 70px 24px; padding: 6px 10px; }
+  .pl-row-header { grid-template-columns: 1fr 120px 70px 24px; padding: 6px 10px; }
+  .detail-row { grid-template-columns: 20px 1fr 100px 20px; padding-left: 20px; }
+  .add-detail-row { padding-left: 20px; }
+  .summary { grid-template-columns: repeat(2, 1fr); }
+  .summary-card .value { font-size: 1.1rem; }
+  header h1 { font-size: 1.1rem; }
+  .container { padding: 10px; }
+}
+@media (max-width: 420px) {
+  .pl-row { grid-template-columns: 1fr 100px 24px; }
+  .pl-row-header { grid-template-columns: 1fr 100px 24px; }
+  .pl-row .prev-value { display: none; }
+  .pl-row-header span:nth-child(3) { display: none; }
+  .detail-row { grid-template-columns: 18px 1fr 80px 18px; }
+  .summary { grid-template-columns: 1fr 1fr; gap: 8px; }
+}
+
+/* Assets panel */
+.assets-panel {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.assets-panel .assets-main { text-align: center; }
+.assets-panel .assets-main .assets-label {
+  font-size: 0.75rem; opacity: 0.7; margin-bottom: 4px;
+}
+.assets-panel .assets-main .assets-value {
+  font-size: 1.8rem; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.assets-panel .assets-input-group { text-align: center; }
+.assets-panel .assets-input-group label {
+  display: block; font-size: 0.7rem; opacity: 0.7; margin-bottom: 4px;
+}
+.assets-panel .assets-input-group input {
+  font-family: inherit; font-size: 1rem; padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,0.3); border-radius: 6px;
+  background: rgba(255,255,255,0.1); color: #fff;
+  text-align: right; width: 100%; max-width: 200px;
+  font-variant-numeric: tabular-nums;
+}
+.assets-panel .assets-input-group input::placeholder { color: rgba(255,255,255,0.4); }
+.assets-panel .assets-input-group input:focus {
+  outline: none; border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.15);
+}
+.assets-panel .assets-change {
+  text-align: center;
+}
+.assets-panel .assets-change .change-label {
+  font-size: 0.7rem; opacity: 0.7; margin-bottom: 4px;
+}
+.assets-panel .assets-change .change-value {
+  font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.assets-panel .assets-change .change-value.up { color: #4ade80; }
+.assets-panel .assets-change .change-value.down { color: #f87171; }
+.assets-panel .assets-change .change-value.flat { color: rgba(255,255,255,0.5); }
+.assets-panel .assets-detail {
+  grid-column: 1 / -1;
+  display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+  border-top: 1px solid rgba(255,255,255,0.15);
+  padding-top: 12px; margin-top: 4px;
+}
+.assets-panel .assets-detail .detail-item {
+  text-align: center; min-width: 100px;
+}
+.assets-panel .assets-detail .detail-item label {
+  display: block; font-size: 0.65rem; opacity: 0.6; margin-bottom: 2px;
+}
+.assets-panel .assets-detail .detail-item input {
+  font-family: inherit; font-size: 0.85rem; padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
+  background: rgba(255,255,255,0.08); color: #fff;
+  text-align: right; width: 120px; font-variant-numeric: tabular-nums;
+}
+.assets-panel .assets-detail .detail-item input::placeholder { color: rgba(255,255,255,0.3); }
+.assets-panel .assets-detail .detail-item input:focus {
+  outline: none; border-color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.12);
+}
+.assets-panel .assets-detail .detail-item .detail-computed {
+  font-size: 0.85rem; font-weight: 600; padding: 4px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .assets-panel { grid-template-columns: 1fr; gap: 12px; padding: 16px; }
+  .assets-panel .assets-main .assets-value { font-size: 1.4rem; }
+  .assets-panel .assets-detail { gap: 10px; }
+}
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>月次PLシミュレーター</h1>
+    <div class="header-actions">
+      <button onclick="toggleCategoryMgmt()">項目管理</button>
+      <button onclick="exportJSON()">JSON出力</button>
+      <button onclick="exportCSV()">CSV出力</button>
+      <button onclick="document.getElementById('importFile').click()">インポート</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+    </div>
+  </header>
+
+  <div class="month-nav">
+    <button onclick="prevMonth()">&larr;</button>
+    <select id="monthSelect" onchange="switchMonth()"></select>
+    <button onclick="nextMonth()">&rarr;</button>
+    <input type="month" id="newMonthInput">
+    <button class="primary" onclick="addMonth()">月を追加</button>
+    <button class="danger small" onclick="deleteCurrentMonth()">この月を削除</button>
+  </div>
+
+  <!-- Assets Panel -->
+  <div class="assets-panel" id="assetsPanel"></div>
+
+  <div class="summary" id="summaryCards"></div>
+  <div id="plContent"></div>
+
+  <div class="memo-section">
+    <label>メモ（この月の反省・気づき）</label>
+    <textarea id="memoArea" placeholder="例：今月は広告費をかけすぎた。来月は外注費を見直す。" oninput="saveMemo()"></textarea>
+  </div>
+
+  <div class="confirm-box">
+    <h3>要確認項目（経営判断で決めるべき論点）</h3>
+    <ul>
+      <li><strong>減価償却費</strong>を個別管理するか — 設備投資がある場合は販管費内に追加推奨</li>
+      <li><strong>借入金返済</strong>をPLに入れるか、資金繰り表で別管理するか — PLには利息のみ、元本は資金繰りが基本</li>
+      <li><strong>事業と個人の支出</strong>を分離するか — 経営判断には分離推奨</li>
+      <li><strong>消費税</strong>を税込/税抜どちらで扱うか — 正確な利益把握には税抜推奨</li>
+      <li><strong>自分の給与</strong>を「人件費」にするか「オーナー取り分」として別管理するか — 法人なら人件費、個人事業なら別管理が一般的</li>
+    </ul>
+  </div>
+
+  <div class="category-mgmt hidden" id="categoryMgmt">
+    <h3>PL項目の管理（ON/OFFで表示切替・カスタム項目追加）</h3>
+    <div id="categoryList"></div>
+    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="text" id="newCatName" placeholder="新しい項目名" style="font-size:0.85rem; padding:5px 8px; border:1px solid var(--border); border-radius:4px; flex:1; min-width:140px;">
+      <select id="newCatSection" style="font-size:0.85rem; padding:5px 8px; border:1px solid var(--border); border-radius:4px;">
+        <option value="sga">販管費</option>
+        <option value="revenue">売上高</option>
+        <option value="cogs">売上原価</option>
+        <option value="nonop_income">営業外収益</option>
+        <option value="nonop_expense">営業外費用</option>
+        <option value="special_income">特別利益</option>
+        <option value="special_expense">特別損失</option>
+        <option value="tax">税金</option>
+      </select>
+      <button class="primary small" onclick="addCustomCategory()">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ========== DATA MODEL ==========
+// Each input item can have "details" — an array of { name, amount } sub-entries.
+// If details exist, the item total = sum of details.
+// If no details, the item total = direct input value.
+// Data per month: { itemId: { value: number, details: [{name, amount}] }, memo: '' }
+
+const DEFAULT_ITEMS = [
+  { id: 'revenue', name: '売上高', section: 'revenue', type: 'input', badge: '初期', detailable: true },
+  { id: 'cogs', name: '売上原価', section: 'cogs', type: 'input', badge: '初期', detailable: true },
+  { id: 'gross_profit', name: '売上総利益', section: 'gross', type: 'computed', badge: '自動' },
+  { id: 'sga_personnel', name: '人件費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_outsource', name: '外注費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_advertising', name: '広告宣伝費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_rent', name: '地代家賃', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_telecom', name: '通信費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_subscription', name: 'サブスク/ソフト利用料', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_travel', name: '旅費交通費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_entertainment', name: '交際費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_supplies', name: '消耗品費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_fees', name: '支払手数料', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_misc', name: '雑費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_total', name: '販管費合計', section: 'sga_total', type: 'computed', badge: '自動' },
+  { id: 'operating_profit', name: '営業利益', section: 'op', type: 'computed', badge: '自動' },
+  { id: 'nonop_income', name: '営業外収益', section: 'nonop_income', type: 'input', badge: '初期', detailable: true },
+  { id: 'nonop_expense', name: '営業外費用', section: 'nonop_expense', type: 'input', badge: '初期', detailable: true },
+  { id: 'ordinary_profit', name: '経常利益', section: 'ordinary', type: 'computed', badge: '自動' },
+  { id: 'special_income', name: '特別利益', section: 'special_income', type: 'input', badge: '任意', detailable: true },
+  { id: 'special_expense', name: '特別損失', section: 'special_expense', type: 'input', badge: '任意', detailable: true },
+  { id: 'pretax_profit', name: '税引前当期利益', section: 'pretax', type: 'computed', badge: '自動' },
+  { id: 'tax', name: '税金（法人税等）', section: 'tax', type: 'input', badge: '初期', detailable: true },
+  { id: 'net_profit', name: '当期純利益', section: 'net', type: 'computed', badge: '自動' },
+];
+
+// ========== STATE ==========
+
+let state = {
+  months: {},
+  currentMonth: '',
+  disabledItems: [],
+  customItems: [],
+  openDetails: {}, // { itemId: true } - which detail sections are expanded
+};
+
+const STORAGE_KEY = 'pl_simulator_data_v2';
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      state.months = s.months || {};
+      state.currentMonth = s.currentMonth || '';
+      state.disabledItems = s.disabledItems || [];
+      state.customItems = s.customItems || [];
+    }
+    // Migrate from v1
+    if (!raw) {
+      const v1 = localStorage.getItem('pl_simulator_data');
+      if (v1) {
+        const s = JSON.parse(v1);
+        // Convert old flat values to new { value, details } format
+        const newMonths = {};
+        for (const [mk, md] of Object.entries(s.months || {})) {
+          newMonths[mk] = {};
+          for (const [k, v] of Object.entries(md)) {
+            if (k === 'memo') { newMonths[mk].memo = v; }
+            else { newMonths[mk][k] = { value: parseFloat(v) || 0, details: [] }; }
+          }
+        }
+        state.months = newMonths;
+        state.disabledItems = s.disabledItems || [];
+        state.customItems = s.customItems || [];
+      }
+    }
+  } catch(e) { console.error('Load error:', e); }
+
+  if (Object.keys(state.months).length === 0) {
+    const now = new Date();
+    const key = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    state.months[key] = {};
+    state.currentMonth = key;
+  }
+  if (!state.currentMonth || !state.months[state.currentMonth]) {
+    state.currentMonth = Object.keys(state.months).sort().pop();
+  }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      months: state.months,
+      currentMonth: state.currentMonth,
+      disabledItems: state.disabledItems,
+      customItems: state.customItems,
+    }));
+  } catch(e) { console.error('Save error:', e); }
+}
+
+// ========== ITEM HELPERS ==========
+
+function getAllItems() {
+  const base = JSON.parse(JSON.stringify(DEFAULT_ITEMS));
+  for (const ci of state.customItems) {
+    const insertMap = {
+      'sga': 'sga_total',
+      'revenue': 'cogs',
+      'cogs': 'gross_profit',
+      'nonop_income': 'ordinary_profit',
+      'nonop_expense': 'ordinary_profit',
+      'special_income': 'pretax_profit',
+      'special_expense': 'pretax_profit',
+      'tax': 'net_profit',
+    };
+    const beforeId = insertMap[ci.section];
+    if (beforeId) {
+      const idx = base.findIndex(i => i.id === beforeId);
+      if (idx !== -1) { base.splice(idx, 0, ci); continue; }
+    }
+    base.push(ci);
+  }
+  return base;
+}
+
+function getActiveItems() {
+  return getAllItems().filter(i => !state.disabledItems.includes(i.id));
+}
+
+// Get item value for a month. Supports both detail-sum and direct input.
+function getItemValue(monthKey, itemId) {
+  const md = state.months[monthKey];
+  if (!md || !md[itemId]) return 0;
+  const entry = md[itemId];
+  if (entry.details && entry.details.length > 0) {
+    return entry.details.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+  }
+  return parseFloat(entry.value) || 0;
+}
+
+function getItemEntry(monthKey, itemId) {
+  const md = state.months[monthKey];
+  if (!md) return null;
+  return md[itemId] || null;
+}
+
+function ensureItemEntry(monthKey, itemId) {
+  if (!state.months[monthKey]) state.months[monthKey] = {};
+  if (!state.months[monthKey][itemId]) state.months[monthKey][itemId] = { value: 0, details: [] };
+  return state.months[monthKey][itemId];
+}
+
+// ========== CALCULATIONS ==========
+
+function calcMonth(monthKey) {
+  const items = getActiveItems();
+  const v = (id) => getItemValue(monthKey, id);
+
+  const sgaIds = items.filter(i => i.section === 'sga' && i.type === 'input').map(i => i.id);
+  const sgaTotal = sgaIds.reduce((sum, id) => sum + v(id), 0);
+
+  const revenueIds = items.filter(i => i.section === 'revenue' && i.type === 'input').map(i => i.id);
+  const revenueTotal = revenueIds.reduce((sum, id) => sum + v(id), 0);
+
+  const cogsIds = items.filter(i => i.section === 'cogs' && i.type === 'input').map(i => i.id);
+  const cogsTotal = cogsIds.reduce((sum, id) => sum + v(id), 0);
+
+  const nonopIncomeIds = items.filter(i => i.section === 'nonop_income' && i.type === 'input').map(i => i.id);
+  const nonopExpenseIds = items.filter(i => i.section === 'nonop_expense' && i.type === 'input').map(i => i.id);
+  const specialIncomeIds = items.filter(i => i.section === 'special_income' && i.type === 'input').map(i => i.id);
+  const specialExpenseIds = items.filter(i => i.section === 'special_expense' && i.type === 'input').map(i => i.id);
+  const taxIds = items.filter(i => i.section === 'tax' && i.type === 'input').map(i => i.id);
+
+  const nonopIncome = nonopIncomeIds.reduce((sum, id) => sum + v(id), 0);
+  const nonopExpense = nonopExpenseIds.reduce((sum, id) => sum + v(id), 0);
+  const specialIncome = specialIncomeIds.reduce((sum, id) => sum + v(id), 0);
+  const specialExpense = specialExpenseIds.reduce((sum, id) => sum + v(id), 0);
+  const taxTotal = taxIds.reduce((sum, id) => sum + v(id), 0);
+
+  const grossProfit = revenueTotal - cogsTotal;
+  const operatingProfit = grossProfit - sgaTotal;
+  const ordinaryProfit = operatingProfit + nonopIncome - nonopExpense;
+  const pretaxProfit = ordinaryProfit + specialIncome - specialExpense;
+  const netProfit = pretaxProfit - taxTotal;
+
+  return {
+    revenue_total: revenueTotal,
+    cogs_total: cogsTotal,
+    gross_profit: grossProfit,
+    sga_total: sgaTotal,
+    operating_profit: operatingProfit,
+    ordinary_profit: ordinaryProfit,
+    pretax_profit: pretaxProfit,
+    tax_total: taxTotal,
+    net_profit: netProfit,
+  };
+}
+
+// ========== FORMATTING ==========
+
+function fmt(n) {
+  if (n === 0) return '0';
+  return n.toLocaleString('ja-JP', { maximumFractionDigits: 0 });
+}
+
+function fmtDiff(current, prev) {
+  if (prev === undefined || prev === null) return '';
+  const diff = current - prev;
+  if (diff === 0) return '<span style="color:var(--text-sub)">±0</span>';
+  const sign = diff > 0 ? '+' : '';
+  const cls = diff > 0 ? 'positive' : 'negative';
+  return `<span class="${cls}">${sign}${fmt(diff)}</span>`;
+}
+
+// ========== MONTH NAVIGATION ==========
+
+function getMonthKeys() { return Object.keys(state.months).sort(); }
+
+function getPrevMonthKey(key) {
+  const keys = getMonthKeys();
+  const idx = keys.indexOf(key);
+  return idx > 0 ? keys[idx - 1] : null;
+}
+
+function formatMonthLabel(key) {
+  const [y, m] = key.split('-');
+  return `${y}年${parseInt(m)}月`;
+}
+
+function populateMonthSelect() {
+  const sel = document.getElementById('monthSelect');
+  const keys = getMonthKeys();
+  sel.innerHTML = keys.map(k =>
+    `<option value="${k}" ${k === state.currentMonth ? 'selected' : ''}>${formatMonthLabel(k)}</option>`
+  ).join('');
+}
+
+function switchMonth() {
+  state.currentMonth = document.getElementById('monthSelect').value;
+  saveState(); render();
+}
+
+function prevMonth() {
+  const keys = getMonthKeys();
+  const idx = keys.indexOf(state.currentMonth);
+  if (idx > 0) { state.currentMonth = keys[idx - 1]; saveState(); render(); }
+}
+
+function nextMonth() {
+  const keys = getMonthKeys();
+  const idx = keys.indexOf(state.currentMonth);
+  if (idx < keys.length - 1) { state.currentMonth = keys[idx + 1]; saveState(); render(); }
+}
+
+function addMonth() {
+  const input = document.getElementById('newMonthInput');
+  let key = input.value;
+  if (!key) {
+    const keys = getMonthKeys();
+    const latest = keys[keys.length - 1];
+    const [y, m] = latest.split('-').map(Number);
+    const d = new Date(y, m, 1);
+    key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+  if (state.months[key]) { toast('この月は既に存在します'); return; }
+  state.months[key] = {};
+  state.currentMonth = key;
+  input.value = '';
+  saveState(); render();
+  toast(`${formatMonthLabel(key)} を追加しました`);
+}
+
+function deleteCurrentMonth() {
+  const keys = getMonthKeys();
+  if (keys.length <= 1) { toast('最後の月は削除できません'); return; }
+  if (!confirm(`${formatMonthLabel(state.currentMonth)} を削除しますか？`)) return;
+  delete state.months[state.currentMonth];
+  const remaining = getMonthKeys();
+  state.currentMonth = remaining[remaining.length - 1];
+  saveState(); render();
+  toast('削除しました');
+}
+
+// ========== RENDER ==========
+
+function render() {
+  populateMonthSelect();
+  renderAssets();
+  renderSummary();
+  renderPL();
+  renderMemo();
+  renderCategoryList();
+}
+
+// ========== ASSETS ==========
+
+function getAssets(monthKey) {
+  const md = state.months[monthKey];
+  if (!md) return null;
+  return md._assets || null;
+}
+
+function ensureAssets(monthKey) {
+  if (!state.months[monthKey]) state.months[monthKey] = {};
+  if (!state.months[monthKey]._assets) {
+    state.months[monthKey]._assets = { total: 0, cash: 0, receivable: 0, debt: 0 };
+  }
+  return state.months[monthKey]._assets;
+}
+
+function renderAssets() {
+  const mk = state.currentMonth;
+  const a = getAssets(mk);
+  const total = a ? (parseFloat(a.total) || 0) : 0;
+  const cash = a ? (parseFloat(a.cash) || 0) : 0;
+  const receivable = a ? (parseFloat(a.receivable) || 0) : 0;
+  const debt = a ? (parseFloat(a.debt) || 0) : 0;
+  const netAssets = total - debt;
+
+  const prevKey = getPrevMonthKey(mk);
+  const prevA = prevKey ? getAssets(prevKey) : null;
+  const prevTotal = prevA ? (parseFloat(prevA.total) || 0) : null;
+
+  let changeHtml = '';
+  if (prevTotal != null) {
+    const diff = total - prevTotal;
+    const cls = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
+    const sign = diff > 0 ? '+' : '';
+    changeHtml = `
+      <div class="change-label">前月比</div>
+      <div class="change-value ${cls}">${sign}¥${fmt(diff)}</div>`;
+  } else {
+    changeHtml = `<div class="change-label">前月比</div><div class="change-value flat">—</div>`;
+  }
+
+  document.getElementById('assetsPanel').innerHTML = `
+    <div class="assets-input-group">
+      <label>総資産（現金+資産）</label>
+      <input type="number" value="${total || ''}" placeholder="0"
+        onchange="updateAsset('total', this.value)" oninput="updateAsset('total', this.value)">
+    </div>
+    <div class="assets-main">
+      <div class="assets-label">純資産（総資産 − 負債）</div>
+      <div class="assets-value ${netAssets >= 0 ? '' : 'negative'}" style="${netAssets < 0 ? 'color:#f87171' : ''}">¥${fmt(netAssets)}</div>
+    </div>
+    <div class="assets-change">${changeHtml}</div>
+    <div class="assets-detail">
+      <div class="detail-item">
+        <label>現金・預金</label>
+        <input type="number" value="${cash || ''}" placeholder="0"
+          onchange="updateAsset('cash', this.value)" oninput="updateAsset('cash', this.value)">
+      </div>
+      <div class="detail-item">
+        <label>売掛金・未回収</label>
+        <input type="number" value="${receivable || ''}" placeholder="0"
+          onchange="updateAsset('receivable', this.value)" oninput="updateAsset('receivable', this.value)">
+      </div>
+      <div class="detail-item">
+        <label>負債（借入金等）</label>
+        <input type="number" value="${debt || ''}" placeholder="0"
+          onchange="updateAsset('debt', this.value)" oninput="updateAsset('debt', this.value)">
+      </div>
+      <div class="detail-item">
+        <label>純資産</label>
+        <div class="detail-computed" style="${netAssets < 0 ? 'color:#f87171' : 'color:#4ade80'}">¥${fmt(netAssets)}</div>
+      </div>
+    </div>`;
+}
+
+function updateAsset(field, value) {
+  const a = ensureAssets(state.currentMonth);
+  a[field] = value === '' ? 0 : parseFloat(value) || 0;
+  saveState();
+  // Partial update without full re-render (keep focus)
+  const netAssets = (parseFloat(a.total) || 0) - (parseFloat(a.debt) || 0);
+  const mainVal = document.querySelector('.assets-main .assets-value');
+  if (mainVal) {
+    mainVal.textContent = '¥' + fmt(netAssets);
+    mainVal.style.color = netAssets < 0 ? '#f87171' : '';
+  }
+  const detailComputed = document.querySelector('.assets-detail .detail-computed');
+  if (detailComputed) {
+    detailComputed.textContent = '¥' + fmt(netAssets);
+    detailComputed.style.color = netAssets < 0 ? '#f87171' : '#4ade80';
+  }
+  // Update change display
+  const prevKey = getPrevMonthKey(state.currentMonth);
+  if (prevKey && field === 'total') {
+    const prevA = getAssets(prevKey);
+    const prevTotal = prevA ? (parseFloat(prevA.total) || 0) : 0;
+    const diff = (parseFloat(a.total) || 0) - prevTotal;
+    const changeEl = document.querySelector('.assets-change .change-value');
+    if (changeEl) {
+      const sign = diff > 0 ? '+' : '';
+      changeEl.textContent = sign + '¥' + fmt(diff);
+      changeEl.className = 'change-value ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
+    }
+  }
+}
+
+function renderSummary() {
+  const calc = calcMonth(state.currentMonth);
+  const prevKey = getPrevMonthKey(state.currentMonth);
+  const prevCalc = prevKey ? calcMonth(prevKey) : null;
+
+  const cards = [
+    { label: '売上高', value: calc.revenue_total, prev: prevCalc?.revenue_total },
+    { label: '売上総利益', value: calc.gross_profit, prev: prevCalc?.gross_profit },
+    { label: '営業利益', value: calc.operating_profit, prev: prevCalc?.operating_profit },
+    { label: '経常利益', value: calc.ordinary_profit, prev: prevCalc?.ordinary_profit },
+    { label: '当期純利益', value: calc.net_profit, prev: prevCalc?.net_profit },
+  ];
+
+  const rev = calc.revenue_total;
+  const grossMargin = rev > 0 ? ((calc.gross_profit / rev) * 100).toFixed(1) : '-';
+  const opMargin = rev > 0 ? ((calc.operating_profit / rev) * 100).toFixed(1) : '-';
+
+  document.getElementById('summaryCards').innerHTML = cards.map(c => {
+    const cls = c.value > 0 ? 'positive' : c.value < 0 ? 'negative' : '';
+    return `<div class="summary-card">
+      <div class="label">${c.label}</div>
+      <div class="value ${cls}">¥${fmt(c.value)}</div>
+      <div class="diff">${c.prev != null ? '前月比: ' + fmtDiff(c.value, c.prev) : ''}</div>
+    </div>`;
+  }).join('') + `
+    <div class="summary-card">
+      <div class="label">粗利率 / 営業利益率</div>
+      <div class="value" style="font-size:1.1rem">${grossMargin}% / ${opMargin}%</div>
+      <div class="diff" style="color:var(--text-sub)">売上高に対する比率</div>
+    </div>`;
+}
+
+function renderPL() {
+  const items = getActiveItems();
+  const mk = state.currentMonth;
+  const calc = calcMonth(mk);
+  const prevKey = getPrevMonthKey(mk);
+  const prevCalc = prevKey ? calcMonth(prevKey) : null;
+
+  const revenueItems = items.filter(i => ['revenue', 'cogs', 'gross'].includes(i.section));
+  const sgaItems = items.filter(i => i.section === 'sga' || i.section === 'sga_total');
+  const profitItems = items.filter(i => ['op', 'nonop_income', 'nonop_expense', 'ordinary', 'special_income', 'special_expense', 'pretax', 'tax', 'net'].includes(i.section));
+
+  document.getElementById('plContent').innerHTML =
+    renderSection('売上・原価', revenueItems, mk, calc, prevKey, prevCalc) +
+    renderSection('販売費及び一般管理費', sgaItems, mk, calc, prevKey, prevCalc) +
+    renderSection('営業外損益・特別損益・税金', profitItems, mk, calc, prevKey, prevCalc);
+}
+
+function renderSection(label, sectionItems, mk, calc, prevKey, prevCalc) {
+  let html = `<div class="pl-section"><div class="pl-section-header">${label}</div>`;
+  html += `<div class="pl-row-header"><span>項目</span><span>金額（円）</span><span>前月</span><span></span></div>`;
+
+  for (const item of sectionItems) {
+    if (item.type === 'computed') {
+      html += renderComputedRow(item, calc, prevCalc);
+    } else {
+      html += renderInputRow(item, mk, prevKey);
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderComputedRow(item, calc, prevCalc) {
+  const val = calc[item.id] || 0;
+  const prevVal = prevCalc ? (prevCalc[item.id] || 0) : null;
+  const cls = item.id.includes('total') ? 'subtotal' : 'computed';
+  return `<div class="pl-row ${cls}">
+    <div class="item-name">${item.name} <span class="badge auto">${item.badge}</span></div>
+    <div class="computed-value ${val >= 0 ? 'positive' : 'negative'}">¥${fmt(val)}</div>
+    <div class="prev-value">${prevVal != null ? '¥' + fmt(prevVal) : '-'}</div>
+    <div></div>
+  </div>`;
+}
+
+function renderInputRow(item, mk, prevKey) {
+  const entry = getItemEntry(mk, item.id);
+  const hasDetails = entry && entry.details && entry.details.length > 0;
+  const total = getItemValue(mk, item.id);
+  const prevTotal = prevKey ? getItemValue(prevKey, item.id) : null;
+  const isOpen = state.openDetails[item.id];
+
+  const badgeCls = item.badge === '任意' ? 'optional' : item.badge === 'カスタム' ? 'optional' : '';
+  const badgeHtml = item.badge !== '初期' ? `<span class="badge ${badgeCls}">${item.badge}</span>` : '';
+
+  let html = '';
+
+  if (hasDetails) {
+    // Show as parent with auto-summed total
+    html += `<div class="pl-row parent-row">
+      <div class="item-name">
+        <button class="toggle-detail" onclick="toggleDetails('${item.id}')">${isOpen ? '▼' : '▶'} ${item.name}</button>
+        ${badgeHtml}
+        <span style="font-size:0.65rem;color:var(--text-sub)">(${entry.details.length}件)</span>
+      </div>
+      <div class="parent-total">¥${fmt(total)}</div>
+      <div class="prev-value">${prevTotal != null ? '¥' + fmt(prevTotal) : '-'}</div>
+      <div></div>
+    </div>`;
+
+    if (isOpen) {
+      html += renderDetailRows(item.id, mk);
+    }
+  } else {
+    // Direct input mode
+    const val = entry ? (entry.value || '') : '';
+    html += `<div class="pl-row">
+      <div class="item-name">
+        ${item.detailable ? `<button class="toggle-detail" onclick="toggleDetails('${item.id}')" title="明細を展開">${isOpen ? '▼' : '▶'}</button>` : ''}
+        ${item.name} ${badgeHtml}
+      </div>
+      <div><input type="number" value="${val}" data-item="${item.id}" onchange="updateDirectValue(this)" oninput="updateDirectValue(this)" placeholder="0"></div>
+      <div class="prev-value">${prevTotal != null ? '¥' + fmt(prevTotal) : '-'}</div>
+      <div></div>
+    </div>`;
+
+    if (isOpen && item.detailable) {
+      html += renderDetailRows(item.id, mk);
+    }
+  }
+
+  return html;
+}
+
+function renderDetailRows(itemId, mk) {
+  const entry = getItemEntry(mk, itemId);
+  const details = entry ? (entry.details || []) : [];
+
+  let html = '';
+  details.forEach((d, i) => {
+    html += `<div class="detail-row">
+      <div class="detail-idx">${i + 1}</div>
+      <div><input type="text" value="${escHtml(d.name || '')}" placeholder="内容（例：A社案件）"
+        data-item="${itemId}" data-didx="${i}" data-field="name"
+        onchange="updateDetail(this)" oninput="updateDetail(this)"></div>
+      <div><input type="number" value="${d.amount || ''}" placeholder="金額"
+        data-item="${itemId}" data-didx="${i}" data-field="amount"
+        onchange="updateDetail(this)" oninput="updateDetail(this)"></div>
+      <div><button class="ghost-danger" onclick="removeDetail('${itemId}', ${i})" title="削除">&times;</button></div>
+    </div>`;
+  });
+
+  html += `<div class="add-detail-row">
+    <button class="ghost" onclick="addDetail('${itemId}')">+ 明細を追加</button>
+  </div>`;
+
+  return html;
+}
+
+function renderMemo() {
+  const md = state.months[state.currentMonth] || {};
+  document.getElementById('memoArea').value = md.memo || '';
+}
+
+// ========== INPUT HANDLERS ==========
+
+function updateDirectValue(el) {
+  const itemId = el.dataset.item;
+  const entry = ensureItemEntry(state.currentMonth, itemId);
+  entry.value = el.value === '' ? 0 : parseFloat(el.value) || 0;
+  saveState();
+  renderSummary();
+  updateAllComputed();
+}
+
+function updateDetail(el) {
+  const itemId = el.dataset.item;
+  const idx = parseInt(el.dataset.didx);
+  const field = el.dataset.field;
+  const entry = ensureItemEntry(state.currentMonth, itemId);
+  if (!entry.details[idx]) entry.details[idx] = { name: '', amount: 0 };
+
+  if (field === 'name') {
+    entry.details[idx].name = el.value;
+  } else {
+    entry.details[idx].amount = el.value === '' ? 0 : parseFloat(el.value) || 0;
+  }
+  saveState();
+
+  if (field === 'amount') {
+    // Update parent total display
+    const parentRow = document.querySelector(`.pl-row.parent-row .toggle-detail[onclick*="'${itemId}'"]`);
+    if (parentRow) {
+      const totalEl = parentRow.closest('.pl-row').querySelector('.parent-total');
+      if (totalEl) {
+        const total = getItemValue(state.currentMonth, itemId);
+        totalEl.textContent = '¥' + fmt(total);
+      }
+    }
+    renderSummary();
+    updateAllComputed();
+  }
+}
+
+function addDetail(itemId) {
+  const entry = ensureItemEntry(state.currentMonth, itemId);
+  entry.details.push({ name: '', amount: 0 });
+  state.openDetails[itemId] = true;
+  saveState();
+  render();
+  // Focus the new name input
+  setTimeout(() => {
+    const inputs = document.querySelectorAll(`input[data-item="${itemId}"][data-field="name"]`);
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+
+function removeDetail(itemId, idx) {
+  const entry = ensureItemEntry(state.currentMonth, itemId);
+  entry.details.splice(idx, 1);
+  saveState();
+  render();
+}
+
+function toggleDetails(itemId) {
+  state.openDetails[itemId] = !state.openDetails[itemId];
+  render();
+}
+
+function updateAllComputed() {
+  const calc = calcMonth(state.currentMonth);
+  const prevKey = getPrevMonthKey(state.currentMonth);
+  const prevCalc = prevKey ? calcMonth(prevKey) : null;
+
+  document.querySelectorAll('.pl-row.computed .computed-value, .pl-row.subtotal .computed-value').forEach(el => {
+    const row = el.closest('.pl-row');
+    const nameEl = row.querySelector('.item-name');
+    if (!nameEl) return;
+    const text = nameEl.textContent.trim();
+    const idMap = {
+      '売上総利益': 'gross_profit', '販管費合計': 'sga_total',
+      '営業利益': 'operating_profit', '経常利益': 'ordinary_profit',
+      '税引前当期利益': 'pretax_profit', '当期純利益': 'net_profit',
+    };
+    for (const [name, id] of Object.entries(idMap)) {
+      if (text.startsWith(name)) {
+        const val = calc[id] || 0;
+        el.textContent = '¥' + fmt(val);
+        el.className = 'computed-value ' + (val >= 0 ? 'positive' : 'negative');
+        break;
+      }
+    }
+  });
+}
+
+function saveMemo() {
+  if (!state.months[state.currentMonth]) state.months[state.currentMonth] = {};
+  state.months[state.currentMonth].memo = document.getElementById('memoArea').value;
+  saveState();
+}
+
+// ========== CATEGORY MANAGEMENT ==========
+
+function toggleCategoryMgmt() {
+  document.getElementById('categoryMgmt').classList.toggle('hidden');
+}
+
+function renderCategoryList() {
+  const all = getAllItems().filter(i => i.type === 'input');
+  const html = all.map(item => {
+    const checked = !state.disabledItems.includes(item.id) ? 'checked' : '';
+    const isCustom = state.customItems.some(c => c.id === item.id);
+    return `<div class="cat-item">
+      <input type="checkbox" ${checked} onchange="toggleItem('${item.id}', this.checked)">
+      <span class="cat-name">${item.name}
+        <span class="badge ${item.badge === '任意' ? 'optional' : item.badge === 'カスタム' ? 'optional' : ''}">${item.badge}</span>
+        <span style="font-size:0.7rem;color:var(--text-sub)">[${sectionLabel(item.section)}]</span>
+      </span>
+      ${isCustom ? `<button class="danger small" onclick="removeCustomItem('${item.id}')">削除</button>` : ''}
+    </div>`;
+  }).join('');
+  document.getElementById('categoryList').innerHTML = html;
+}
+
+function sectionLabel(s) {
+  const map = { revenue:'売上', cogs:'原価', sga:'販管費', nonop_income:'営業外収益',
+    nonop_expense:'営業外費用', special_income:'特別利益', special_expense:'特別損失', tax:'税金' };
+  return map[s] || s;
+}
+
+function toggleItem(id, enabled) {
+  if (enabled) state.disabledItems = state.disabledItems.filter(i => i !== id);
+  else if (!state.disabledItems.includes(id)) state.disabledItems.push(id);
+  saveState(); render();
+}
+
+function addCustomCategory() {
+  const name = document.getElementById('newCatName').value.trim();
+  const section = document.getElementById('newCatSection').value;
+  if (!name) { toast('項目名を入力してください'); return; }
+  const id = 'custom_' + Date.now();
+  state.customItems.push({ id, name, section, type: 'input', badge: 'カスタム', detailable: true });
+  document.getElementById('newCatName').value = '';
+  saveState(); render();
+  toast(`「${name}」を追加しました`);
+}
+
+function removeCustomItem(id) {
+  state.customItems = state.customItems.filter(c => c.id !== id);
+  state.disabledItems = state.disabledItems.filter(i => i !== id);
+  for (const key of Object.keys(state.months)) { delete state.months[key][id]; }
+  saveState(); render();
+  toast('項目を削除しました');
+}
+
+// ========== EXPORT / IMPORT ==========
+
+function exportJSON() {
+  const data = {
+    exportDate: new Date().toISOString(),
+    version: 2,
+    months: state.months,
+    customItems: state.customItems,
+    disabledItems: state.disabledItems,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, `pl_data_${state.currentMonth}.json`);
+  toast('JSONをエクスポートしました');
+}
+
+function exportCSV() {
+  const items = getActiveItems();
+  const keys = getMonthKeys();
+  let csv = '\uFEFF項目,内訳,' + keys.map(formatMonthLabel).join(',') + '\n';
+
+  for (const item of items) {
+    if (item.type === 'computed') {
+      const row = [item.name, ''];
+      for (const mk of keys) {
+        const calc = calcMonth(mk);
+        row.push(calc[item.id] || 0);
+      }
+      csv += row.join(',') + '\n';
+    } else {
+      // Parent total row
+      const row = [item.name, '合計'];
+      for (const mk of keys) row.push(getItemValue(mk, item.id));
+      csv += row.join(',') + '\n';
+
+      // Detail rows
+      const allDetails = new Map();
+      for (const mk of keys) {
+        const entry = getItemEntry(mk, item.id);
+        if (entry && entry.details) {
+          entry.details.forEach((d, i) => {
+            const dKey = d.name || `明細${i+1}`;
+            if (!allDetails.has(dKey)) allDetails.set(dKey, {});
+            allDetails.get(dKey)[mk] = d.amount || 0;
+          });
+        }
+      }
+      for (const [dName, dVals] of allDetails) {
+        const dRow = ['', dName];
+        for (const mk of keys) dRow.push(dVals[mk] || 0);
+        csv += dRow.join(',') + '\n';
+      }
+    }
+  }
+  // Assets rows
+  const assetFields = [
+    { key: 'total', label: '総資産' },
+    { key: 'cash', label: '現金・預金' },
+    { key: 'receivable', label: '売掛金・未回収' },
+    { key: 'debt', label: '負債' },
+  ];
+  for (const af of assetFields) {
+    const row = [af.label, ''];
+    for (const mk of keys) {
+      const a = getAssets(mk);
+      row.push(a ? (parseFloat(a[af.key]) || 0) : 0);
+    }
+    csv += row.join(',') + '\n';
+  }
+  // Net assets
+  const naRow = ['純資産', ''];
+  for (const mk of keys) {
+    const a = getAssets(mk);
+    const t = a ? (parseFloat(a.total) || 0) : 0;
+    const d = a ? (parseFloat(a.debt) || 0) : 0;
+    naRow.push(t - d);
+  }
+  csv += naRow.join(',') + '\n';
+
+  csv += 'メモ,,' + keys.map(k => '"' + ((state.months[k] || {}).memo || '').replace(/"/g, '""') + '"').join(',') + '\n';
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  downloadBlob(blob, `pl_data_${state.currentMonth}.csv`);
+  toast('CSVをエクスポートしました');
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.months) {
+        for (const [k, v] of Object.entries(data.months)) {
+          state.months[k] = v;
+        }
+      }
+      if (data.customItems) {
+        for (const ci of data.customItems) {
+          if (!state.customItems.some(e => e.id === ci.id)) state.customItems.push(ci);
+        }
+      }
+      if (data.disabledItems) state.disabledItems = data.disabledItems;
+      if (!state.currentMonth || !state.months[state.currentMonth]) {
+        state.currentMonth = Object.keys(state.months).sort().pop();
+      }
+      saveState(); render();
+      toast('インポートしました');
+    } catch(err) {
+      toast('インポートに失敗しました: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ========== UTILS ==========
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ========== INIT ==========
+
+loadState();
+
+const nmi = document.getElementById('newMonthInput');
+const ks = getMonthKeys();
+if (ks.length > 0) {
+  const latest = ks[ks.length - 1];
+  const [y, m] = latest.split('-').map(Number);
+  const nd = new Date(y, m, 1);
+  nmi.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0');
+}
+
+render();
+</script>
+</body>
+</html>
