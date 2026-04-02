@@ -236,6 +236,48 @@ button.ghost-danger:hover { background: var(--red-bg); }
 }
 .toast.show { opacity: 1; transform: translateY(0); }
 
+/* Share modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: var(--card); border-radius: var(--radius); padding: 24px;
+  max-width: 560px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.modal-box h3 { font-size: 1rem; margin-bottom: 12px; }
+.modal-box .share-url-box {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.modal-box .share-url-box input {
+  flex: 1; font-family: inherit; font-size: 0.8rem; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--text);
+}
+.modal-box .share-note {
+  font-size: 0.75rem; color: var(--text-sub); line-height: 1.5;
+}
+.modal-box .share-options {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.modal-box .share-options label {
+  font-size: 0.8rem; display: flex; align-items: center; gap: 4px; cursor: pointer;
+}
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* Shared data banner */
+.shared-banner {
+  background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%);
+  border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 14px 20px; margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px;
+}
+.shared-banner .shared-msg { font-size: 0.85rem; font-weight: 600; color: var(--accent); }
+.shared-banner .shared-sub { font-size: 0.75rem; color: var(--text-sub); }
+
 /* Responsive */
 @media (max-width: 640px) {
   .pl-row { grid-template-columns: 1fr 120px 70px 24px; padding: 6px 10px; }
@@ -347,6 +389,7 @@ button.ghost-danger:hover { background: var(--red-bg); }
     <h1>月次PLシミュレーター</h1>
     <div class="header-actions">
       <button onclick="toggleCategoryMgmt()">項目管理</button>
+      <button class="primary" onclick="openShareModal()">共有</button>
       <button onclick="exportJSON()">JSON出力</button>
       <button onclick="exportCSV()">CSV出力</button>
       <button onclick="document.getElementById('importFile').click()">インポート</button>
@@ -406,6 +449,40 @@ button.ghost-danger:hover { background: var(--red-bg); }
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Share Modal -->
+<div class="modal-overlay hidden" id="shareModal" onclick="if(event.target===this)closeShareModal()">
+  <div class="modal-box">
+    <h3>PLデータを共有</h3>
+    <div class="share-options">
+      <label><input type="radio" name="shareScope" value="current" checked> 現在の月のみ</label>
+      <label><input type="radio" name="shareScope" value="all"> 全期間</label>
+    </div>
+    <div class="share-url-box">
+      <input type="text" id="shareUrlInput" readonly placeholder="生成中...">
+      <button class="primary" onclick="copyShareURL()">コピー</button>
+    </div>
+    <p class="share-note">
+      このURLにPLデータが含まれます。URLを送るだけで相手がデータを閲覧できます。<br>
+      ※ データはURL内に圧縮格納されるため、サーバーには送信されません。
+    </p>
+    <div class="modal-actions">
+      <button onclick="closeShareModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shared Banner (shown when viewing shared data) -->
+<div class="shared-banner hidden" id="sharedBanner">
+  <div>
+    <div class="shared-msg">共有データを閲覧中</div>
+    <div class="shared-sub">このデータは共有リンクから読み込まれました</div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="primary small" onclick="importSharedData()">自分のデータに取り込む</button>
+    <button class="small" onclick="dismissSharedBanner()">閉じる</button>
+  </div>
+</div>
 
 <script>
 // ========== DATA MODEL ==========
@@ -1249,20 +1326,189 @@ function toast(msg) {
   setTimeout(() => el.classList.remove('show'), 2500);
 }
 
-// ========== INIT ==========
+// ========== SHARE FUNCTIONS ==========
 
-loadState();
-
-const nmi = document.getElementById('newMonthInput');
-const ks = getMonthKeys();
-if (ks.length > 0) {
-  const latest = ks[ks.length - 1];
-  const [y, m] = latest.split('-').map(Number);
-  const nd = new Date(y, m, 1);
-  nmi.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0');
+// Compress string → base64 (using CompressionStream if available, fallback to plain base64)
+async function compressToBase64(str) {
+  try {
+    if (typeof CompressionStream !== 'undefined') {
+      const blob = new Blob([str]);
+      const cs = new CompressionStream('gzip');
+      const stream = blob.stream().pipeThrough(cs);
+      const compressed = await new Response(stream).arrayBuffer();
+      const bytes = new Uint8Array(compressed);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return 'gz:' + btoa(binary);
+    }
+  } catch(e) { console.warn('Compression failed, using plain base64:', e); }
+  // Fallback: plain base64
+  return 'b64:' + btoa(unescape(encodeURIComponent(str)));
 }
 
-render();
+// Decompress base64 → string
+async function decompressFromBase64(encoded) {
+  if (encoded.startsWith('gz:')) {
+    const b64 = encoded.slice(3);
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes]);
+    const ds = new DecompressionStream('gzip');
+    const stream = blob.stream().pipeThrough(ds);
+    const text = await new Response(stream).text();
+    return text;
+  } else if (encoded.startsWith('b64:')) {
+    return decodeURIComponent(escape(atob(encoded.slice(4))));
+  }
+  throw new Error('Unknown encoding');
+}
+
+function buildShareData(scope) {
+  if (scope === 'current') {
+    const mk = state.currentMonth;
+    return {
+      v: 2,
+      months: { [mk]: state.months[mk] },
+      currentMonth: mk,
+      customItems: state.customItems,
+      disabledItems: state.disabledItems,
+    };
+  }
+  return {
+    v: 2,
+    months: state.months,
+    currentMonth: state.currentMonth,
+    customItems: state.customItems,
+    disabledItems: state.disabledItems,
+  };
+}
+
+async function generateShareURL() {
+  const scope = document.querySelector('input[name="shareScope"]:checked').value;
+  const data = buildShareData(scope);
+  const json = JSON.stringify(data);
+  const encoded = await compressToBase64(json);
+  const base = location.origin + location.pathname;
+  return base + '#share=' + encodeURIComponent(encoded);
+}
+
+async function openShareModal() {
+  document.getElementById('shareModal').classList.remove('hidden');
+  const input = document.getElementById('shareUrlInput');
+  input.value = '生成中...';
+  try {
+    const url = await generateShareURL();
+    input.value = url;
+  } catch(e) {
+    input.value = 'エラー: ' + e.message;
+  }
+  // Update URL when scope changes
+  document.querySelectorAll('input[name="shareScope"]').forEach(radio => {
+    radio.onchange = async () => {
+      input.value = '生成中...';
+      try { input.value = await generateShareURL(); } catch(e) { input.value = 'エラー: ' + e.message; }
+    };
+  });
+}
+
+function closeShareModal() {
+  document.getElementById('shareModal').classList.add('hidden');
+}
+
+function copyShareURL() {
+  const input = document.getElementById('shareUrlInput');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    toast('共有URLをコピーしました');
+  }).catch(() => {
+    document.execCommand('copy');
+    toast('共有URLをコピーしました');
+  });
+}
+
+// Shared data state (loaded from URL, kept separate from local data)
+let sharedState = null;
+
+async function loadSharedDataFromURL() {
+  const hash = location.hash;
+  if (!hash.startsWith('#share=')) return false;
+  try {
+    const encoded = decodeURIComponent(hash.slice('#share='.length));
+    const json = await decompressFromBase64(encoded);
+    const data = JSON.parse(json);
+    if (!data.months) throw new Error('Invalid share data');
+    sharedState = data;
+    // Temporarily load shared data for viewing
+    state.months = data.months;
+    state.currentMonth = data.currentMonth || Object.keys(data.months).sort().pop();
+    state.customItems = data.customItems || [];
+    state.disabledItems = data.disabledItems || [];
+    return true;
+  } catch(e) {
+    console.error('Failed to load shared data:', e);
+    toast('共有データの読み込みに失敗しました');
+    return false;
+  }
+}
+
+function importSharedData() {
+  if (!sharedState) return;
+  // Merge shared data into local storage
+  const localRaw = localStorage.getItem(STORAGE_KEY);
+  if (localRaw) {
+    const local = JSON.parse(localRaw);
+    for (const [k, v] of Object.entries(sharedState.months)) {
+      local.months[k] = v;
+    }
+    if (sharedState.customItems) {
+      for (const ci of sharedState.customItems) {
+        if (!local.customItems.some(e => e.id === ci.id)) local.customItems.push(ci);
+      }
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      months: sharedState.months,
+      currentMonth: sharedState.currentMonth,
+      customItems: sharedState.customItems || [],
+      disabledItems: sharedState.disabledItems || [],
+    }));
+  }
+  // Clear hash and reload as local data
+  history.replaceState(null, '', location.pathname);
+  location.reload();
+}
+
+function dismissSharedBanner() {
+  document.getElementById('sharedBanner').classList.add('hidden');
+}
+
+// ========== INIT ==========
+
+(async function init() {
+  const isShared = await loadSharedDataFromURL();
+  if (isShared) {
+    // Show shared banner, don't save to localStorage
+    document.getElementById('sharedBanner').classList.remove('hidden');
+    // Move banner to top of container
+    const container = document.querySelector('.container');
+    container.insertBefore(document.getElementById('sharedBanner'), container.firstChild.nextSibling);
+  } else {
+    loadState();
+  }
+
+  const nmi = document.getElementById('newMonthInput');
+  const ks = getMonthKeys();
+  if (ks.length > 0) {
+    const latest = ks[ks.length - 1];
+    const [y, m] = latest.split('-').map(Number);
+    const nd = new Date(y, m, 1);
+    nmi.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0');
+  }
+
+  render();
+})();
 </script>
 </body>
 </html>
