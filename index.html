@@ -32,6 +32,18 @@ body {
   min-height: 100vh;
 }
 
+
+/* Hide number input spinners (Chrome/Safari/Edge/Opera + Firefox) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
 
 header {
@@ -125,7 +137,7 @@ button.ghost-danger:hover { background: var(--red-bg); }
   border: 1px solid var(--border); border-radius: 4px;
   width: 100%; font-variant-numeric: tabular-nums;
 }
-.pl-row input.num-input { text-align: right; }
+.pl-row input[type="number"] { text-align: right; }
 .pl-row input[type="text"]:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light);
 }
@@ -158,7 +170,7 @@ button.ghost-danger:hover { background: var(--red-bg); }
   font-family: inherit; font-size: 0.8rem; padding: 4px 6px;
   border: 1px solid var(--border); border-radius: 4px; width: 100%;
 }
-.detail-row input.num-input {
+.detail-row input[type="number"] {
   font-family: inherit; font-size: 0.8rem; padding: 4px 6px;
   border: 1px solid var(--border); border-radius: 4px; width: 100%;
   text-align: right; font-variant-numeric: tabular-nums;
@@ -907,7 +919,7 @@ function renderAssets() {
   document.getElementById('assetsPanel').innerHTML = `
     <div class="assets-input-group">
       <label>総資産（現金+資産）</label>
-      <input type="text" inputmode="decimal" class="num-input" value="${total || ''}" placeholder="0"
+      <input type="number" value="${total || ''}" placeholder="0"
         onchange="updateAsset('total', this.value)" oninput="updateAsset('total', this.value)">
     </div>
     <div class="assets-main">
@@ -918,17 +930,17 @@ function renderAssets() {
     <div class="assets-detail">
       <div class="detail-item">
         <label>現金・預金</label>
-        <input type="text" inputmode="decimal" class="num-input" value="${cash || ''}" placeholder="0"
+        <input type="number" value="${cash || ''}" placeholder="0"
           onchange="updateAsset('cash', this.value)" oninput="updateAsset('cash', this.value)">
       </div>
       <div class="detail-item">
         <label>売掛金・未回収</label>
-        <input type="text" inputmode="decimal" class="num-input" value="${receivable || ''}" placeholder="0"
+        <input type="number" value="${receivable || ''}" placeholder="0"
           onchange="updateAsset('receivable', this.value)" oninput="updateAsset('receivable', this.value)">
       </div>
       <div class="detail-item">
         <label>負債（借入金等）</label>
-        <input type="text" inputmode="decimal" class="num-input" value="${debt || ''}" placeholder="0"
+        <input type="number" value="${debt || ''}" placeholder="0"
           onchange="updateAsset('debt', this.value)" oninput="updateAsset('debt', this.value)">
       </div>
       <div class="detail-item">
@@ -1081,7 +1093,7 @@ function renderInputRow(item, mk, prevKey) {
         ${item.detailable ? `<button class="toggle-detail" onclick="toggleDetails('${item.id}')" title="明細を展開">${isOpen ? '▼' : '▶'}</button>` : ''}
         ${item.name} ${badgeHtml}
       </div>
-      <div><input type="text" inputmode="decimal" class="num-input" value="${val}" data-item="${item.id}" onchange="updateDirectValue(this)" oninput="updateDirectValue(this)" placeholder="0"></div>
+      <div><input type="number" value="${val}" data-item="${item.id}" onchange="updateDirectValue(this)" oninput="updateDirectValue(this)" placeholder="0"></div>
       <div class="prev-value">${prevTotal != null ? '¥' + fmt(prevTotal) : '-'}</div>
       <div></div>
     </div>`;
@@ -1105,7 +1117,7 @@ function renderDetailRows(itemId, mk) {
       <div><input type="text" value="${escHtml(d.name || '')}" placeholder="内容（例：A社案件）"
         data-item="${itemId}" data-didx="${i}" data-field="name"
         onchange="updateDetail(this)" oninput="updateDetail(this)"></div>
-      <div><input type="text" inputmode="decimal" class="num-input" value="${d.amount || ''}" placeholder="金額"
+      <div><input type="number" value="${d.amount || ''}" placeholder="金額"
         data-item="${itemId}" data-didx="${i}" data-field="amount"
         onchange="updateDetail(this)" oninput="updateDetail(this)"></div>
       <div><button class="ghost-danger" onclick="removeDetail('${itemId}', ${i})" title="削除">&times;</button></div>
