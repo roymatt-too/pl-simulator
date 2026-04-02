@@ -677,7 +677,11 @@ function saveState() {
       customItems: state.customItems,
     }));
   } catch(e) { console.error('Save error:', e); }
-  // Sync to Firebase room if connected
+}
+
+// Save + sync to Firebase (used only on onchange / explicit actions, NOT on oninput)
+function saveAndSync() {
+  saveState();
   if (typeof syncToRoom === 'function') syncToRoom();
 }
 
@@ -820,19 +824,19 @@ function populateMonthSelect() {
 
 function switchMonth() {
   state.currentMonth = document.getElementById('monthSelect').value;
-  saveState(); render();
+  saveAndSync(); render();
 }
 
 function prevMonth() {
   const keys = getMonthKeys();
   const idx = keys.indexOf(state.currentMonth);
-  if (idx > 0) { state.currentMonth = keys[idx - 1]; saveState(); render(); }
+  if (idx > 0) { state.currentMonth = keys[idx - 1]; saveAndSync(); render(); }
 }
 
 function nextMonth() {
   const keys = getMonthKeys();
   const idx = keys.indexOf(state.currentMonth);
-  if (idx < keys.length - 1) { state.currentMonth = keys[idx + 1]; saveState(); render(); }
+  if (idx < keys.length - 1) { state.currentMonth = keys[idx + 1]; saveAndSync(); render(); }
 }
 
 function addMonth() {
@@ -849,7 +853,7 @@ function addMonth() {
   state.months[key] = {};
   state.currentMonth = key;
   input.value = '';
-  saveState(); render();
+  saveAndSync(); render();
   toast(`${formatMonthLabel(key)} を追加しました`);
 }
 
@@ -860,7 +864,7 @@ function deleteCurrentMonth() {
   delete state.months[state.currentMonth];
   const remaining = getMonthKeys();
   state.currentMonth = remaining[remaining.length - 1];
-  saveState(); render();
+  saveAndSync(); render();
   toast('削除しました');
 }
 
@@ -920,7 +924,7 @@ function renderAssets() {
     <div class="assets-input-group">
       <label>総資産（現金+資産）</label>
       <input type="number" value="${total || ''}" placeholder="0"
-        onchange="updateAsset('total', this.value)" oninput="updateAsset('total', this.value)">
+        oninput="updateAssetLocal('total', this.value)" onchange="updateAssetSync('total', this.value)">
     </div>
     <div class="assets-main">
       <div class="assets-label">純資産（総資産 − 負債）</div>
@@ -931,17 +935,17 @@ function renderAssets() {
       <div class="detail-item">
         <label>現金・預金</label>
         <input type="number" value="${cash || ''}" placeholder="0"
-          onchange="updateAsset('cash', this.value)" oninput="updateAsset('cash', this.value)">
+          oninput="updateAssetLocal('cash', this.value)" onchange="updateAssetSync('cash', this.value)">
       </div>
       <div class="detail-item">
         <label>売掛金・未回収</label>
         <input type="number" value="${receivable || ''}" placeholder="0"
-          onchange="updateAsset('receivable', this.value)" oninput="updateAsset('receivable', this.value)">
+          oninput="updateAssetLocal('receivable', this.value)" onchange="updateAssetSync('receivable', this.value)">
       </div>
       <div class="detail-item">
         <label>負債（借入金等）</label>
         <input type="number" value="${debt || ''}" placeholder="0"
-          onchange="updateAsset('debt', this.value)" oninput="updateAsset('debt', this.value)">
+          oninput="updateAssetLocal('debt', this.value)" onchange="updateAssetSync('debt', this.value)">
       </div>
       <div class="detail-item">
         <label>純資産</label>
@@ -950,11 +954,23 @@ function renderAssets() {
     </div>`;
 }
 
-function updateAsset(field, value) {
+// oninput: local state + display update only (NO Firebase sync)
+function updateAssetLocal(field, value) {
   const a = ensureAssets(state.currentMonth);
   a[field] = value === '' ? 0 : parseFloat(value) || 0;
   saveState();
-  // Partial update without full re-render (keep focus)
+  _updateAssetDisplay(a);
+  if (field === 'total') _updateAssetChange(a);
+}
+// onchange: sync to Firebase (fires when input loses focus)
+function updateAssetSync(field, value) {
+  const a = ensureAssets(state.currentMonth);
+  a[field] = value === '' ? 0 : parseFloat(value) || 0;
+  saveAndSync();
+  _updateAssetDisplay(a);
+  if (field === 'total') _updateAssetChange(a);
+}
+function _updateAssetDisplay(a) {
   const netAssets = (parseFloat(a.total) || 0) - (parseFloat(a.debt) || 0);
   const mainVal = document.querySelector('.assets-main .assets-value');
   if (mainVal) {
@@ -966,9 +982,10 @@ function updateAsset(field, value) {
     detailComputed.textContent = '¥' + fmt(netAssets);
     detailComputed.style.color = netAssets < 0 ? '#f87171' : '#4ade80';
   }
-  // Update change display
+}
+function _updateAssetChange(a) {
   const prevKey = getPrevMonthKey(state.currentMonth);
-  if (prevKey && field === 'total') {
+  if (prevKey) {
     const prevA = getAssets(prevKey);
     const prevTotal = prevA ? (parseFloat(prevA.total) || 0) : 0;
     const diff = (parseFloat(a.total) || 0) - prevTotal;
@@ -1093,7 +1110,7 @@ function renderInputRow(item, mk, prevKey) {
         ${item.detailable ? `<button class="toggle-detail" onclick="toggleDetails('${item.id}')" title="明細を展開">${isOpen ? '▼' : '▶'}</button>` : ''}
         ${item.name} ${badgeHtml}
       </div>
-      <div><input type="number" value="${val}" data-item="${item.id}" onchange="updateDirectValue(this)" oninput="updateDirectValue(this)" placeholder="0"></div>
+      <div><input type="number" value="${val}" data-item="${item.id}" oninput="updateDirectValueLocal(this)" onchange="updateDirectValueSync(this)" placeholder="0"></div>
       <div class="prev-value">${prevTotal != null ? '¥' + fmt(prevTotal) : '-'}</div>
       <div></div>
     </div>`;
@@ -1116,10 +1133,10 @@ function renderDetailRows(itemId, mk) {
       <div class="detail-idx">${i + 1}</div>
       <div><input type="text" value="${escHtml(d.name || '')}" placeholder="内容（例：A社案件）"
         data-item="${itemId}" data-didx="${i}" data-field="name"
-        onchange="updateDetail(this)" oninput="updateDetail(this)"></div>
+        oninput="updateDetailLocal(this)" onchange="updateDetailSync(this)"></div>
       <div><input type="number" value="${d.amount || ''}" placeholder="金額"
         data-item="${itemId}" data-didx="${i}" data-field="amount"
-        onchange="updateDetail(this)" oninput="updateDetail(this)"></div>
+        oninput="updateDetailLocal(this)" onchange="updateDetailSync(this)"></div>
       <div><button class="ghost-danger" onclick="removeDetail('${itemId}', ${i})" title="削除">&times;</button></div>
     </div>`;
   });
@@ -1138,7 +1155,8 @@ function renderMemo() {
 
 // ========== INPUT HANDLERS ==========
 
-function updateDirectValue(el) {
+// oninput: local only
+function updateDirectValueLocal(el) {
   const itemId = el.dataset.item;
   const entry = ensureItemEntry(state.currentMonth, itemId);
   entry.value = el.value === '' ? 0 : parseFloat(el.value) || 0;
@@ -1146,8 +1164,27 @@ function updateDirectValue(el) {
   renderSummary();
   updateAllComputed();
 }
+// onchange: save + sync
+function updateDirectValueSync(el) {
+  const itemId = el.dataset.item;
+  const entry = ensureItemEntry(state.currentMonth, itemId);
+  entry.value = el.value === '' ? 0 : parseFloat(el.value) || 0;
+  saveAndSync();
+  renderSummary();
+  updateAllComputed();
+}
 
-function updateDetail(el) {
+// oninput: local only
+function updateDetailLocal(el) {
+  _updateDetailCore(el);
+  saveState();
+}
+// onchange: save + sync
+function updateDetailSync(el) {
+  _updateDetailCore(el);
+  saveAndSync();
+}
+function _updateDetailCore(el) {
   const itemId = el.dataset.item;
   const idx = parseInt(el.dataset.didx);
   const field = el.dataset.field;
@@ -1159,7 +1196,6 @@ function updateDetail(el) {
   } else {
     entry.details[idx].amount = el.value === '' ? 0 : parseFloat(el.value) || 0;
   }
-  saveState();
 
   if (field === 'amount') {
     // Update parent total display
@@ -1180,7 +1216,7 @@ function addDetail(itemId) {
   const entry = ensureItemEntry(state.currentMonth, itemId);
   entry.details.push({ name: '', amount: 0 });
   state.openDetails[itemId] = true;
-  saveState();
+  saveAndSync();
   render();
   // Focus the new name input
   setTimeout(() => {
@@ -1192,7 +1228,7 @@ function addDetail(itemId) {
 function removeDetail(itemId, idx) {
   const entry = ensureItemEntry(state.currentMonth, itemId);
   entry.details.splice(idx, 1);
-  saveState();
+  saveAndSync();
   render();
 }
 
@@ -1265,7 +1301,7 @@ function sectionLabel(s) {
 function toggleItem(id, enabled) {
   if (enabled) state.disabledItems = state.disabledItems.filter(i => i !== id);
   else if (!state.disabledItems.includes(id)) state.disabledItems.push(id);
-  saveState(); render();
+  saveAndSync(); render();
 }
 
 function addCustomCategory() {
@@ -1275,7 +1311,7 @@ function addCustomCategory() {
   const id = 'custom_' + Date.now();
   state.customItems.push({ id, name, section, type: 'input', badge: 'カスタム', detailable: true });
   document.getElementById('newCatName').value = '';
-  saveState(); render();
+  saveAndSync(); render();
   toast(`「${name}」を追加しました`);
 }
 
@@ -1283,7 +1319,7 @@ function removeCustomItem(id) {
   state.customItems = state.customItems.filter(c => c.id !== id);
   state.disabledItems = state.disabledItems.filter(i => i !== id);
   for (const key of Object.keys(state.months)) { delete state.months[key][id]; }
-  saveState(); render();
+  saveAndSync(); render();
   toast('項目を削除しました');
 }
 
@@ -1401,7 +1437,7 @@ function importJSON(event) {
       if (!state.currentMonth || !state.months[state.currentMonth]) {
         state.currentMonth = Object.keys(state.months).sort().pop();
       }
-      saveState(); render();
+      saveAndSync(); render();
       toast('インポートしました');
     } catch(err) {
       toast('インポートに失敗しました: ' + err.message);
