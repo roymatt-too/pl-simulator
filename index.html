@@ -33,16 +33,6 @@ body {
 }
 
 
-/* Hide number input spinners (Chrome/Safari/Edge/Opera + Firefox) */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
 
 .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
 
@@ -137,7 +127,7 @@ button.ghost-danger:hover { background: var(--red-bg); }
   border: 1px solid var(--border); border-radius: 4px;
   width: 100%; font-variant-numeric: tabular-nums;
 }
-.pl-row input[type="number"] { text-align: right; }
+.pl-row input[type="text"] { text-align: right; }
 .pl-row input[type="text"]:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light);
 }
@@ -170,7 +160,7 @@ button.ghost-danger:hover { background: var(--red-bg); }
   font-family: inherit; font-size: 0.8rem; padding: 4px 6px;
   border: 1px solid var(--border); border-radius: 4px; width: 100%;
 }
-.detail-row input[type="number"] {
+.detail-row input[type="text"][placeholder="¥0"] {
   font-family: inherit; font-size: 0.8rem; padding: 4px 6px;
   border: 1px solid var(--border); border-radius: 4px; width: 100%;
   text-align: right; font-variant-numeric: tabular-nums;
@@ -789,6 +779,27 @@ function fmt(n) {
   if (n === 0) return '0';
   return n.toLocaleString('ja-JP', { maximumFractionDigits: 0 });
 }
+function fmtInput(n) {
+  if (n === '' || n === 0 || n === undefined || n === null) return '';
+  const num = typeof n === 'string' ? parseFloat(n) : n;
+  if (isNaN(num) || num === 0) return '';
+  return '¥' + num.toLocaleString('ja-JP', { maximumFractionDigits: 0 });
+}
+function parseMoneyInput(str) {
+  if (!str) return 0;
+  const cleaned = String(str).replace(/[¥,\s]/g, '');
+  return cleaned === '' ? 0 : parseFloat(cleaned) || 0;
+}
+
+function moneyFocus(el) {
+  var num = parseMoneyInput(el.value);
+  el.value = num === 0 ? '' : String(num);
+  el.select();
+}
+function moneyBlur(el) {
+  var num = parseMoneyInput(el.value);
+  el.value = fmtInput(num);
+}
 
 function fmtDiff(current, prev) {
   if (prev === undefined || prev === null) return '';
@@ -923,7 +934,8 @@ function renderAssets() {
   document.getElementById('assetsPanel').innerHTML = `
     <div class="assets-input-group">
       <label>総資産（現金+資産）</label>
-      <input type="number" value="${total || ''}" placeholder="0"
+      <input type="text" value="${fmtInput(total)}" placeholder="¥0"
+        onfocus="moneyFocus(this)" onblur="moneyBlur(this)"
         oninput="updateAssetLocal('total', this.value)" onchange="updateAssetSync('total', this.value)">
     </div>
     <div class="assets-main">
@@ -934,17 +946,20 @@ function renderAssets() {
     <div class="assets-detail">
       <div class="detail-item">
         <label>現金・預金</label>
-        <input type="number" value="${cash || ''}" placeholder="0"
+        <input type="text" value="${fmtInput(cash)}" placeholder="¥0"
+          onfocus="moneyFocus(this)" onblur="moneyBlur(this)"
           oninput="updateAssetLocal('cash', this.value)" onchange="updateAssetSync('cash', this.value)">
       </div>
       <div class="detail-item">
         <label>売掛金・未回収</label>
-        <input type="number" value="${receivable || ''}" placeholder="0"
+        <input type="text" value="${fmtInput(receivable)}" placeholder="¥0"
+          onfocus="moneyFocus(this)" onblur="moneyBlur(this)"
           oninput="updateAssetLocal('receivable', this.value)" onchange="updateAssetSync('receivable', this.value)">
       </div>
       <div class="detail-item">
         <label>負債（借入金等）</label>
-        <input type="number" value="${debt || ''}" placeholder="0"
+        <input type="text" value="${fmtInput(debt)}" placeholder="¥0"
+          onfocus="moneyFocus(this)" onblur="moneyBlur(this)"
           oninput="updateAssetLocal('debt', this.value)" onchange="updateAssetSync('debt', this.value)">
       </div>
       <div class="detail-item">
@@ -957,7 +972,7 @@ function renderAssets() {
 // oninput: local state + display update only (NO Firebase sync)
 function updateAssetLocal(field, value) {
   const a = ensureAssets(state.currentMonth);
-  a[field] = value === '' ? 0 : parseFloat(value) || 0;
+  a[field] = parseMoneyInput(value);
   saveState();
   _updateAssetDisplay(a);
   if (field === 'total') _updateAssetChange(a);
@@ -965,7 +980,7 @@ function updateAssetLocal(field, value) {
 // onchange: sync to Firebase (fires when input loses focus)
 function updateAssetSync(field, value) {
   const a = ensureAssets(state.currentMonth);
-  a[field] = value === '' ? 0 : parseFloat(value) || 0;
+  a[field] = parseMoneyInput(value);
   saveAndSync();
   _updateAssetDisplay(a);
   if (field === 'total') _updateAssetChange(a);
@@ -1110,7 +1125,7 @@ function renderInputRow(item, mk, prevKey) {
         ${item.detailable ? `<button class="toggle-detail" onclick="toggleDetails('${item.id}')" title="明細を展開">${isOpen ? '▼' : '▶'}</button>` : ''}
         ${item.name} ${badgeHtml}
       </div>
-      <div><input type="number" value="${val}" data-item="${item.id}" oninput="updateDirectValueLocal(this)" onchange="updateDirectValueSync(this)" placeholder="0"></div>
+      <div><input type="text" value="${fmtInput(val)}" data-item="${item.id}" onfocus="moneyFocus(this)" onblur="moneyBlur(this)" oninput="updateDirectValueLocal(this)" onchange="updateDirectValueSync(this)" placeholder="¥0"></div>
       <div class="prev-value">${prevTotal != null ? '¥' + fmt(prevTotal) : '-'}</div>
       <div></div>
     </div>`;
@@ -1134,7 +1149,8 @@ function renderDetailRows(itemId, mk) {
       <div><input type="text" value="${escHtml(d.name || '')}" placeholder="内容（例：A社案件）"
         data-item="${itemId}" data-didx="${i}" data-field="name"
         oninput="updateDetailLocal(this)" onchange="updateDetailSync(this)"></div>
-      <div><input type="number" value="${d.amount || ''}" placeholder="金額"
+      <div><input type="text" value="${fmtInput(d.amount)}" placeholder="¥0"
+        onfocus="moneyFocus(this)" onblur="moneyBlur(this)"
         data-item="${itemId}" data-didx="${i}" data-field="amount"
         oninput="updateDetailLocal(this)" onchange="updateDetailSync(this)"></div>
       <div><button class="ghost-danger" onclick="removeDetail('${itemId}', ${i})" title="削除">&times;</button></div>
@@ -1159,7 +1175,7 @@ function renderMemo() {
 function updateDirectValueLocal(el) {
   const itemId = el.dataset.item;
   const entry = ensureItemEntry(state.currentMonth, itemId);
-  entry.value = el.value === '' ? 0 : parseFloat(el.value) || 0;
+  entry.value = parseMoneyInput(el.value);
   saveState();
   renderSummary();
   updateAllComputed();
@@ -1168,7 +1184,7 @@ function updateDirectValueLocal(el) {
 function updateDirectValueSync(el) {
   const itemId = el.dataset.item;
   const entry = ensureItemEntry(state.currentMonth, itemId);
-  entry.value = el.value === '' ? 0 : parseFloat(el.value) || 0;
+  entry.value = parseMoneyInput(el.value);
   saveAndSync();
   renderSummary();
   updateAllComputed();
@@ -1194,7 +1210,7 @@ function _updateDetailCore(el) {
   if (field === 'name') {
     entry.details[idx].name = el.value;
   } else {
-    entry.details[idx].amount = el.value === '' ? 0 : parseFloat(el.value) || 0;
+    entry.details[idx].amount = parseMoneyInput(el.value);
   }
 
   if (field === 'amount') {
