@@ -463,14 +463,13 @@ button.ghost-danger:hover { background: var(--red-bg); }
     <textarea id="memoArea" placeholder="例：今月は広告費をかけすぎた。来月は外注費を見直す。" oninput="saveMemo()"></textarea>
   </div>
 
-  <div class="confirm-box">
-    <h3>要確認項目（経営判断で決めるべき論点）</h3>
+  <div class="confirm-box" style="background:var(--accent-light);border-color:var(--accent)">
+    <h3 style="color:var(--accent)">このPLの前提</h3>
     <ul>
-      <li><strong>減価償却費</strong>を個別管理するか — 設備投資がある場合は販管費内に追加推奨</li>
-      <li><strong>借入金返済</strong>をPLに入れるか、資金繰り表で別管理するか — PLには利息のみ、元本は資金繰りが基本</li>
-      <li><strong>事業と個人の支出</strong>を分離するか — 経営判断には分離推奨</li>
-      <li><strong>消費税</strong>を税込/税抜どちらで扱うか — 正確な利益把握には税抜推奨</li>
-      <li><strong>自分の給与</strong>を「人件費」にするか「オーナー取り分」として別管理するか — 法人なら人件費、個人事業なら別管理が一般的</li>
+      <li>★ <strong>税抜</strong>ベースで入力してください（正確な利益把握のため）</li>
+      <li>★ <strong>事業と個人の支出</strong>は分離して入力してください</li>
+      <li>★ <strong>借入金</strong>の元本返済はPLに含めません（資金繰り表で管理）。利息のみ「借入金利息」に入力</li>
+      <li>★ <strong>オーナー取り分</strong>は個人事業主向け。法人の場合は「人件費」に役員報酬として含めてください</li>
     </ul>
   </div>
 
@@ -592,14 +591,17 @@ const DEFAULT_ITEMS = [
   { id: 'sga_supplies', name: '消耗品費', section: 'sga', type: 'input', badge: '初期', detailable: true },
   { id: 'sga_fees', name: '支払手数料', section: 'sga', type: 'input', badge: '初期', detailable: true },
   { id: 'sga_misc', name: '雑費', section: 'sga', type: 'input', badge: '初期', detailable: true },
+  { id: 'sga_depreciation', name: '減価償却費', section: 'sga', type: 'input', badge: '初期', detailable: true, note: '★ 設備投資がある場合に記入' },
   { id: 'sga_total', name: '販管費合計', section: 'sga_total', type: 'computed', badge: '自動' },
   { id: 'operating_profit', name: '営業利益', section: 'op', type: 'computed', badge: '自動' },
   { id: 'nonop_income', name: '営業外収益', section: 'nonop_income', type: 'input', badge: '初期', detailable: true },
   { id: 'nonop_expense', name: '営業外費用', section: 'nonop_expense', type: 'input', badge: '初期', detailable: true },
+  { id: 'nonop_interest', name: '借入金利息', section: 'nonop_expense', type: 'input', badge: '初期', detailable: true, note: '★ 元本返済はPL外（資金繰り表で管理）' },
   { id: 'ordinary_profit', name: '経常利益', section: 'ordinary', type: 'computed', badge: '自動' },
   { id: 'special_income', name: '特別利益', section: 'special_income', type: 'input', badge: '任意', detailable: true },
   { id: 'special_expense', name: '特別損失', section: 'special_expense', type: 'input', badge: '任意', detailable: true },
   { id: 'pretax_profit', name: '税引前当期利益', section: 'pretax', type: 'computed', badge: '自動' },
+  { id: 'owner_draw', name: 'オーナー取り分', section: 'special_expense', type: 'input', badge: '初期', detailable: true, note: '★ 個人事業主の場合。法人なら人件費に含める' },
   { id: 'tax', name: '税金（法人税等）', section: 'tax', type: 'input', badge: '初期', detailable: true },
   { id: 'net_profit', name: '当期純利益', section: 'net', type: 'computed', badge: '自動' },
 ];
@@ -1098,6 +1100,7 @@ function renderInputRow(item, mk, prevKey) {
 
   const badgeCls = item.badge === '任意' ? 'optional' : item.badge === 'カスタム' ? 'optional' : '';
   const badgeHtml = item.badge !== '初期' ? `<span class="badge ${badgeCls}">${item.badge}</span>` : '';
+  const noteHtml = item.note ? `<span style="font-size:0.6rem;color:var(--text-sub);display:block;margin-top:1px">${item.note}</span>` : '';
 
   let html = '';
 
@@ -1108,6 +1111,7 @@ function renderInputRow(item, mk, prevKey) {
         <button class="toggle-detail" onclick="toggleDetails('${item.id}')">${isOpen ? '▼' : '▶'} ${item.name}</button>
         ${badgeHtml}
         <span style="font-size:0.65rem;color:var(--text-sub)">(${entry.details.length}件)</span>
+        ${noteHtml}
       </div>
       <div class="parent-total">¥${fmt(total)}</div>
       <div class="prev-value">${prevTotal != null ? '¥' + fmt(prevTotal) : '-'}</div>
@@ -1124,6 +1128,7 @@ function renderInputRow(item, mk, prevKey) {
       <div class="item-name">
         ${item.detailable ? `<button class="toggle-detail" onclick="toggleDetails('${item.id}')" title="明細を展開">${isOpen ? '▼' : '▶'}</button>` : ''}
         ${item.name} ${badgeHtml}
+        ${noteHtml}
       </div>
       <div><input type="text" value="${fmtInput(val)}" data-item="${item.id}" onfocus="moneyFocus(this)" onblur="moneyBlur(this)" oninput="updateDirectValueLocal(this)" onchange="updateDirectValueSync(this)" placeholder="¥0"></div>
       <div class="prev-value">${prevTotal != null ? '¥' + fmt(prevTotal) : '-'}</div>
