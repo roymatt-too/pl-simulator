@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/user/**)",
+      "Bash(ls /mnt/)",
+      "Read(//d//**)",
+      "Read(//e//**)",
+      "WebSearch",
+      "Bash(ssh root@85.131.246.250 'pip3 install -q replicate 2>/dev/null; echo \"\"installed\"\"')",
+      "Bash(curl -sL \"https://image.pollinations.ai/prompt/hamburger\" -o /c/Users/user/Downloads/burger_v2.jpg -H \"User-Agent: Mozilla/5.0\" -w \"%{http_code}\")",
+      "Bash(curl -sL \"https://api.pollinations.ai/generate\" -X POST -H \"Content-Type: application/json\" -d '{\"\"prompt\"\":\"\"cute hamburger character\"\",\"\"width\"\":512,\"\"height\"\":512}' -o /c/Users/user/Downloads/burger_v3.jpg -w \"%{http_code}\")"
+    ]
+  }
+}
