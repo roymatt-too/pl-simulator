@@ -1566,21 +1566,47 @@ async function joinRoomById(roomId) {
   // Setup presence
   setupPresence(roomId);
 
-  // Listen for changes
+  // Listen for changes from other users
+  let pendingRemoteData = null;
   roomListener = roomRef.on('value', (snap) => {
     const data = snap.val();
     if (!data) return;
 
-    // Skip echo-back from our own recent write (within 1s)
-    if (Date.now() - lastSyncTimestamp < 1000) return;
+    // Skip echo-back from our own recent write (within 2s)
+    if (Date.now() - lastSyncTimestamp < 2000) return;
+
+    // If user is currently focused on an input, defer render until blur
+    const active = document.activeElement;
+    const isUserTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+
+    if (isUserTyping) {
+      // Store data for later, render when user finishes typing
+      pendingRemoteData = data;
+      if (!active._blurListenerAdded) {
+        active._blurListenerAdded = true;
+        active.addEventListener('blur', function onBlur() {
+          active.removeEventListener('blur', onBlur);
+          active._blurListenerAdded = false;
+          if (pendingRemoteData) {
+            isSyncingFromRemote = true;
+            state.months = pendingRemoteData.months || {};
+            state.currentMonth = pendingRemoteData.currentMonth || Object.keys(state.months).sort().pop() || '';
+            state.customItems = pendingRemoteData.customItems || [];
+            state.disabledItems = pendingRemoteData.disabledItems || [];
+            pendingRemoteData = null;
+            render();
+            isSyncingFromRemote = false;
+          }
+        }, { once: true });
+      }
+      return;
+    }
 
     isSyncingFromRemote = true;
-
     state.months = data.months || {};
     state.currentMonth = data.currentMonth || Object.keys(state.months).sort().pop() || '';
     state.customItems = data.customItems || [];
     state.disabledItems = data.disabledItems || [];
-
     render();
     isSyncingFromRemote = false;
   });
