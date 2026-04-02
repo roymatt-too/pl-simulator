@@ -320,17 +320,6 @@ button.ghost-danger:hover { background: var(--red-bg); }
   border: 1px solid var(--border); border-radius: 4px;
 }
 
-/* Firebase setup notice */
-.firebase-setup {
-  background: var(--yellow-bg); border: 1px solid #fbbf24;
-  border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
-  font-size: 0.8rem; line-height: 1.6;
-}
-.firebase-setup h4 { color: var(--yellow); margin-bottom: 8px; }
-.firebase-setup code {
-  background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 2px;
-  font-size: 0.75rem;
-}
 
 /* Responsive */
 @media (max-width: 640px) {
@@ -545,19 +534,6 @@ button.ghost-danger:hover { background: var(--red-bg); }
             <button class="primary" onclick="joinRoom()">参加</button>
           </div>
         </div>
-      </div>
-      <div id="firebaseSetupNotice" class="firebase-setup hidden">
-        <h4>Firebase 設定が必要です</h4>
-        <p>リアルタイム共有には Firebase Realtime Database が必要です。<br>
-        <strong>手順:</strong></p>
-        <ol style="padding-left:20px;margin:8px 0;">
-          <li><a href="https://console.firebase.google.com/" target="_blank">Firebase Console</a> でプロジェクト作成</li>
-          <li>Realtime Database を有効化（テストモードで開始）</li>
-          <li>プロジェクト設定 → ウェブアプリ追加 → config をコピー</li>
-          <li>下のフィールドに貼り付け</li>
-        </ol>
-        <textarea id="firebaseConfigInput" rows="6" style="width:100%;font-family:monospace;font-size:0.75rem;padding:8px;border:1px solid var(--border);border-radius:4px;margin-top:8px;" placeholder='{ "apiKey": "...", "authDomain": "...", "databaseURL": "...", "projectId": "..." }'></textarea>
-        <button class="primary small" style="margin-top:8px;" onclick="saveFirebaseConfig()">設定を保存して接続</button>
       </div>
     </div>
     <div class="modal-actions">
@@ -1438,7 +1414,15 @@ function toast(msg) {
 
 // ========== FIREBASE REALTIME SYNC ==========
 
-const FIREBASE_CONFIG_KEY = 'pl_firebase_config';
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCdr1tFol2DJP7tX5jFU9asqssZVA7Sg4A",
+  authDomain: "pl-simulator-d120a.firebaseapp.com",
+  databaseURL: "https://pl-simulator-d120a-default-rtdb.firebaseio.com",
+  projectId: "pl-simulator-d120a",
+  storageBucket: "pl-simulator-d120a.firebasestorage.app",
+  messagingSenderId: "553707374818",
+  appId: "1:553707374818:web:8e22c2fe8df520b77fb6bb"
+};
 const FIREBASE_ROOM_KEY = 'pl_current_room';
 let firebaseApp = null;
 let firebaseDb = null;
@@ -1446,40 +1430,9 @@ let currentRoomId = null;
 let roomListener = null;
 let presenceRef = null;
 let myPresenceKey = null;
-let isSyncingFromRemote = false; // prevent save loops
+let isSyncingFromRemote = false;
 let firebaseReady = false;
 let firebaseScriptsLoaded = false;
-
-function getFirebaseConfig() {
-  try {
-    const raw = localStorage.getItem(FIREBASE_CONFIG_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function saveFirebaseConfig() {
-  const input = document.getElementById('firebaseConfigInput');
-  try {
-    let text = input.value.trim();
-    // Handle pasted JS object (not valid JSON) by converting to JSON
-    if (text.startsWith('{') && !text.includes('"apiKey"') && text.includes('apiKey')) {
-      text = text.replace(/(\w+)\s*:/g, '"$1":').replace(/'/g, '"');
-    }
-    const config = JSON.parse(text);
-    if (!config.databaseURL && !config.projectId) {
-      throw new Error('databaseURL または projectId が必要です');
-    }
-    if (!config.databaseURL && config.projectId) {
-      config.databaseURL = `https://${config.projectId}-default-rtdb.firebaseio.com`;
-    }
-    localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(config));
-    toast('Firebase設定を保存しました');
-    document.getElementById('firebaseSetupNotice').classList.add('hidden');
-    initFirebase();
-  } catch(e) {
-    toast('設定の解析に失敗: ' + e.message);
-  }
-}
 
 async function loadFirebaseScripts() {
   if (firebaseScriptsLoaded) return true;
@@ -1508,9 +1461,6 @@ function loadScript(src) {
 }
 
 async function initFirebase() {
-  const config = getFirebaseConfig();
-  if (!config) return false;
-
   const loaded = await loadFirebaseScripts();
   if (!loaded) return false;
 
@@ -1519,7 +1469,7 @@ async function initFirebase() {
       if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
         firebaseApp = firebase.apps[0];
       } else {
-        firebaseApp = firebase.initializeApp(config);
+        firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
       }
     }
     firebaseDb = firebase.database();
@@ -1550,16 +1500,8 @@ function generateRoomId() {
 
 async function createRoom() {
   if (!firebaseReady) {
-    const config = getFirebaseConfig();
-    if (!config) {
-      document.getElementById('firebaseSetupNotice').classList.remove('hidden');
-      return;
-    }
     const ok = await initFirebase();
-    if (!ok) {
-      document.getElementById('firebaseSetupNotice').classList.remove('hidden');
-      return;
-    }
+    if (!ok) { toast('Firebase接続に失敗しました'); return; }
   }
 
   const roomId = generateRoomId();
@@ -1588,16 +1530,8 @@ async function joinRoom() {
   if (roomId.length < 4) { toast('無効なルームIDです'); return; }
 
   if (!firebaseReady) {
-    const config = getFirebaseConfig();
-    if (!config) {
-      document.getElementById('firebaseSetupNotice').classList.remove('hidden');
-      return;
-    }
     const ok = await initFirebase();
-    if (!ok) {
-      document.getElementById('firebaseSetupNotice').classList.remove('hidden');
-      return;
-    }
+    if (!ok) { toast('Firebase接続に失敗しました'); return; }
   }
 
   await joinRoomById(roomId);
@@ -1749,12 +1683,6 @@ function copyRoomLink() {
 }
 
 function openRoomModal() {
-  const config = getFirebaseConfig();
-  if (!config) {
-    document.getElementById('firebaseSetupNotice').classList.remove('hidden');
-  } else {
-    document.getElementById('firebaseSetupNotice').classList.add('hidden');
-  }
   document.getElementById('roomModal').classList.remove('hidden');
 }
 
@@ -1950,15 +1878,8 @@ function dismissSharedBanner() {
 
   render();
 
-  // Initialize Firebase if config exists
-  const fbConfig = getFirebaseConfig();
-  if (fbConfig) {
-    await initFirebase();
-  } else if (urlRoom) {
-    // Room link but no Firebase config — prompt setup
-    openRoomModal();
-    document.getElementById('firebaseSetupNotice').classList.remove('hidden');
-  }
+  // Initialize Firebase and auto-join room if in URL
+  await initFirebase();
 })();
 </script>
 </body>
