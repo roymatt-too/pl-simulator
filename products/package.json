@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "canvas": "^3.2.2",
-    "md-to-pdf": "^5.2.5",
-    "puppeteer": "^24.40.0"
-  }
-}
