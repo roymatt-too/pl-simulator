@@ -1431,6 +1431,7 @@ let roomListener = null;
 let presenceRef = null;
 let myPresenceKey = null;
 let isSyncingFromRemote = false;
+let lastSyncTimestamp = 0; // timestamp of last local write to Firebase
 let firebaseReady = false;
 let firebaseScriptsLoaded = false;
 
@@ -1570,6 +1571,9 @@ async function joinRoomById(roomId) {
     const data = snap.val();
     if (!data) return;
 
+    // Skip echo-back from our own recent write (within 1s)
+    if (Date.now() - lastSyncTimestamp < 1000) return;
+
     isSyncingFromRemote = true;
 
     state.months = data.months || {};
@@ -1630,16 +1634,22 @@ function showSyncBar(roomId) {
   }
 }
 
+let syncDebounceTimer = null;
 function syncToRoom() {
   if (!currentRoomId || !firebaseReady || isSyncingFromRemote) return;
-  const roomRef = firebaseDb.ref('rooms/' + currentRoomId + '/data');
-  roomRef.update({
-    months: state.months,
-    currentMonth: state.currentMonth,
-    customItems: state.customItems,
-    disabledItems: state.disabledItems,
-    updatedAt: firebase.database.ServerValue.TIMESTAMP,
-  });
+  // Debounce: wait 300ms after last input before syncing to Firebase
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(() => {
+    lastSyncTimestamp = Date.now();
+    const roomRef = firebaseDb.ref('rooms/' + currentRoomId + '/data');
+    roomRef.update({
+      months: state.months,
+      currentMonth: state.currentMonth,
+      customItems: state.customItems,
+      disabledItems: state.disabledItems,
+      updatedAt: firebase.database.ServerValue.TIMESTAMP,
+    });
+  }, 300);
 }
 
 function leaveRoomSilent() {
