@@ -62,8 +62,8 @@ SUSHIHEY 全体の目的は、以下の順序で達成すること。
 
 2026-04-02 時点の基準値:
 
-- Phase 1: Data Engine = 8%
-- Phase 2: Media Engine = 28%
+- Phase 1: Data Engine = 10%
+- Phase 2: Media Engine = 29%
 - Phase 3: Brand/IP Engine = 18%
 - Phase 4: Revenue Bootstrap Engine = 62%
 
@@ -71,9 +71,9 @@ SUSHIHEY 全体の目的は、以下の順序で達成すること。
 
 加重進捗:
 
-`0.35 x 8 + 0.30 x 28 + 0.20 x 18 + 0.15 x 62 = 24%`
+`0.35 x 10 + 0.30 x 29 + 0.20 x 18 + 0.15 x 62 = 25%`
 
-したがって、2026-04-02 時点の新目的基準での SUSHIHEY 全体進行度は `24%` とする。
+したがって、2026-04-02 時点の新目的基準での SUSHIHEY 全体進行度は `25%` とする。
 
 ### Important Interpretation
 

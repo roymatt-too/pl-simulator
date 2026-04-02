@@ -1,0 +1,146 @@
+# OpenClaw Production Stack — Stable Auth Configuration
+# Deploy to: /root/openclaw-infra/ on VPS
+#
+# BEFORE DEPLOYING:
+#   1. Copy .env.example to .env and fill in real values
+#   2. Ensure DNS points to this VPS
+#   3. Run: docker compose up -d
+
+version: "3.8"
+
+services:
+  # ──────────────────────────────────────────────
+  # n8n — Workflow Engine (Telegram + Claude API)
+  # ──────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: openclaw-n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      # --- Core ---
+      - NODE_ENV=production
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://${N8N_HOST}
+      - N8N_TRUST_PROXY_HEADER=true
+
+      # --- Auth for n8n UI ---
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+
+      # --- Execution Data Pruning (prevents OOM) ---
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=72
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=1000
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+
+      # --- Memory ---
+      - NODE_OPTIONS=--max-old-space-size=1024
+
+      # --- Database (PostgreSQL for production stability) ---
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+
+      # --- Timezone ---
+      - GENERIC_TIMEZONE=Asia/Tokyo
+      - TZ=Asia/Tokyo
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ──────────────────────────────────────────────
+  # OpenClaw Gateway
+  # ──────────────────────────────────────────────
+  openclaw:
+    image: openclaw/gateway:latest
+    container_name: openclaw-gateway
+    restart: always
+    environment:
+      # --- CRITICAL: Use Anthropic API Key (not OAuth, not setup-token) ---
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Unset these to prevent conflicts:
+      # - ANTHROPIC_AUTH_TOKEN (do NOT set)
+      # - ANTHROPIC_BASE_URL (do NOT set unless using proxy)
+    volumes:
+      - openclaw_data:/root/.openclaw
+    depends_on:
+      n8n:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "openclaw status --all 2>&1 | grep -q 'anthropic.*ok' || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ──────────────────────────────────────────────
+  # PostgreSQL (replaces SQLite for production)
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: openclaw-postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  n8n_data:
+  openclaw_data:
+  postgres_data:
